@@ -4,21 +4,18 @@ pipeline {
     environment {
         IMAGE_NAME = 'mi-app-web'
         CONTAINER_NAME = 'mi-contenedor-web'
-        // ---> CAMBIA ESTAS VARIABLES POR LOS DATOS DE TU VM <---
-        VM_IP = '192.168.1.113' 
-        //VM_IP = '192.168.1.113' es la TallerSemestre8 clonar de virtualbox
-        VM_USER = 'jenkins'
-        SSH_CREDS = 'ssh-vm-vmware' // El ID que pusiste en el paso 3
+        VM_IP = '192.168.174.131'
+        VM_USER = 'deploy'
+        SSH_CREDS = 'ssh-deploy-vm'
     }
 
     stages {
         stage('Descargar código') {
             steps {
-                git branch: 'main', url: 'https://github.com/johonlieghton-source/pipelinetalerjenkins.git'
-                
+                git branch: 'main', url: 'https://github.com/piogaretto/pipelinetalerjenkins.git'
             }
         }
-        
+
         stage('Construir Imagen Docker') {
             steps {
                 script {
@@ -33,37 +30,35 @@ pipeline {
                 sh "docker save ${IMAGE_NAME}:latest -o ${IMAGE_NAME}.tar"
             }
         }
-        
-        stage('Enviar a VM de VMware') {
+
+        stage('Enviar a VM destino') {
             steps {
                 echo 'Enviando archivo por SSH a la VM...'
                 withCredentials([sshUserPrivateKey(credentialsId: "${SSH_CREDS}", keyFileVariable: 'SSH_KEY')]) {
-                sh """
-scp -i "$SSH_KEY" -o StrictHostKeyChecking=no "${IMAGE_NAME}.tar" "${VM_USER}@${VM_IP}:/tmp/${IMAGE_NAME}.tar"
+                    sh """
+scp -i "\$SSH_KEY" -o StrictHostKeyChecking=no "${IMAGE_NAME}.tar" "${VM_USER}@${VM_IP}:/tmp/${IMAGE_NAME}.tar"
 """
-
-                //sh 'scp -i $SSH_KEY -o StrictHostKeyChecking=no ${IMAGE_NAME}.tar ${VM_USER}@${VM_IP}:/tmp/${IMAGE_NAME}.tar'
+                }
             }
         }
-}
 
-        stage('Desplegar en VM de VMware') {
+        stage('Desplegar en VM destino') {
             steps {
                 echo 'Levantando el contenedor en la VM remota...'
                 withCredentials([sshUserPrivateKey(credentialsId: "${SSH_CREDS}", keyFileVariable: 'SSH_KEY')]) {
-                sh """
-                ssh -i \$SSH_KEY -o StrictHostKeyChecking=no ${VM_USER}@${VM_IP} '
-                    echo "Deteniendo contenedor anterior..."
-                    docker stop ${CONTAINER_NAME} || true
-                    docker rm ${CONTAINER_NAME} || true
-                    echo "Cargando nueva imagen..."
-                    docker load -i /tmp/${IMAGE_NAME}.tar
-                    echo "Levantando nuevo contenedor..."
-                    docker run -d -p 80:80 --name ${CONTAINER_NAME} ${IMAGE_NAME}:latest
-                    echo "Limpiando archivo temporal..."
-                    rm /tmp/${IMAGE_NAME}.tar
-                '
-            """
+                    sh """
+                    ssh -i \$SSH_KEY -o StrictHostKeyChecking=no ${VM_USER}@${VM_IP} '
+                        echo "Deteniendo contenedor anterior..."
+                        docker stop ${CONTAINER_NAME} || true
+                        docker rm ${CONTAINER_NAME} || true
+                        echo "Cargando nueva imagen..."
+                        docker load -i /tmp/${IMAGE_NAME}.tar
+                        echo "Levantando nuevo contenedor..."
+                        docker run -d -p 80:80 --name ${CONTAINER_NAME} ${IMAGE_NAME}:latest
+                        echo "Limpiando archivo temporal..."
+                        rm /tmp/${IMAGE_NAME}.tar
+                    '
+                    """
                 }
             }
         }
